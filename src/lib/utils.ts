@@ -1,5 +1,7 @@
 export function slugify(value: string) {
   return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // strip accents (e.g. Hungarian á, é, ő, ű)
     .toLowerCase()
     .trim()
     .replace(/['’]/g, "")

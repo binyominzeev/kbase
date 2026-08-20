@@ -17,7 +17,11 @@ Requirements:
 - Surface decisions, open questions, and important uncertainty.
 - Add related topic titles when concepts should be linked.
 - Do not invent unsupported facts.
-- Keep the hierarchy compact but meaningful.`;
+- Keep the hierarchy compact but meaningful.
+- Write every generated field (title, overview, summaries, articles, decisions,
+  open questions, uncertainties, related topics) in the same natural language
+  as the source conversation. Do not translate the content to English or any
+  other language.`;
 
 export async function extractKnowledgeBaseWithOpenAi(
   conversation: NormalizedConversation

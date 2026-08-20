@@ -21,6 +21,14 @@ export type TopicTreeNode = {
   children: TopicTreeNode[];
 };
 
+export type KnowledgeBaseSummary = {
+  slug: string;
+  title: string;
+  overview: string;
+  sourceUrl: string;
+  createdAt: Date;
+};
+
 export type HydratedKnowledgeBase = {
   slug: string;
   title: string;
@@ -281,4 +289,171 @@ export function selectTopic(
   }
 
   return knowledgeBase.topicTree[0];
+}
+
+export async function listKnowledgeBases(): Promise<KnowledgeBaseSummary[]> {
+  const knowledgeBases = await prisma.knowledgeBase.findMany({
+    orderBy: { createdAt: "desc" },
+    select: {
+      slug: true,
+      title: true,
+      overview: true,
+      sourceUrl: true,
+      createdAt: true,
+    },
+  });
+
+  return knowledgeBases;
+}
+
+export async function deleteKnowledgeBase(slug: string): Promise<boolean> {
+  try {
+    await prisma.knowledgeBase.delete({ where: { slug } });
+    return true;
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "P2025"
+    ) {
+      return false;
+    }
+
+    throw error;
+  }
+}
+
+function isRecordNotFoundError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "P2025"
+  );
+}
+
+export async function renameKnowledgeBase(
+  slug: string,
+  title: string
+): Promise<{ slug: string } | null> {
+  const existing = await prisma.knowledgeBase.findUnique({
+    where: { slug },
+    select: { id: true },
+  });
+
+  if (!existing) {
+    return null;
+  }
+
+  const baseSlug = slugify(title) || slug;
+  let newSlug = slug;
+
+  if (baseSlug !== slug) {
+    newSlug = baseSlug;
+
+    for (let attempt = 0; attempt < knowledgeBaseSlugLimit; attempt += 1) {
+      const candidate = attempt === 0 ? baseSlug : `${baseSlug}-${attempt + 1}`;
+      const conflict = await prisma.knowledgeBase.findUnique({
+        where: { slug: candidate },
+        select: { id: true },
+      });
+
+      if (!conflict || conflict.id === existing.id) {
+        newSlug = candidate;
+        break;
+      }
+    }
+  }
+
+  try {
+    await prisma.knowledgeBase.update({
+      where: { id: existing.id },
+      data: { title, slug: newSlug },
+    });
+    return { slug: newSlug };
+  } catch (error) {
+    if (isRecordNotFoundError(error)) {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+export async function renameTopic(
+  knowledgeBaseSlug: string,
+  topicSlug: string,
+  title: string
+): Promise<{ slug: string } | null> {
+  const knowledgeBase = await prisma.knowledgeBase.findUnique({
+    where: { slug: knowledgeBaseSlug },
+    select: { id: true },
+  });
+
+  if (!knowledgeBase) {
+    return null;
+  }
+
+  const topic = await prisma.topic.findUnique({
+    where: {
+      knowledgeBaseId_slug: {
+        knowledgeBaseId: knowledgeBase.id,
+        slug: topicSlug,
+      },
+    },
+    select: { id: true, parentId: true },
+  });
+
+  if (!topic) {
+    return null;
+  }
+
+  const pathSegments = topicSlug.split("/");
+  const parentPath = pathSegments.slice(0, -1);
+  const baseLeafSlug = slugify(title) || "topic";
+
+  const siblings = await prisma.topic.findMany({
+    where: {
+      knowledgeBaseId: knowledgeBase.id,
+      NOT: { id: topic.id },
+    },
+    select: { slug: true },
+  });
+  const siblingLeafSlugs = new Set(
+    siblings.map((sibling) => sibling.slug.split("/").at(-1) ?? sibling.slug)
+  );
+
+  let newLeafSlug = baseLeafSlug;
+  let suffix = 2;
+
+  while (siblingLeafSlugs.has(newLeafSlug)) {
+    newLeafSlug = `${baseLeafSlug}-${suffix}`;
+    suffix += 1;
+  }
+
+  const newSlug = [...parentPath, newLeafSlug].join("/");
+
+  const descendants = await prisma.topic.findMany({
+    where: {
+      knowledgeBaseId: knowledgeBase.id,
+      slug: { startsWith: `${topicSlug}/` },
+    },
+    select: { id: true, slug: true },
+  });
+
+  await prisma.$transaction([
+    prisma.topic.update({
+      where: { id: topic.id },
+      data: { slug: newSlug, title },
+    }),
+    ...descendants.map((descendant) =>
+      prisma.topic.update({
+        where: { id: descendant.id },
+        data: { slug: newSlug + descendant.slug.slice(topicSlug.length) },
+      })
+    ),
+  ]);
+
+  return { slug: newSlug };
 }

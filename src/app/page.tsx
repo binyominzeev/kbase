@@ -1,8 +1,12 @@
 import { BuildForm } from "@/components/build-form";
+import { KnowledgeBaseList } from "@/components/knowledge-base-list";
+import { listKnowledgeBases } from "@/lib/knowledge-base/service";
 
-export default function Home() {
+export default async function Home() {
+  const knowledgeBases = await listKnowledgeBases();
+
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-4xl flex-1 flex-col justify-center px-6 py-16 sm:px-10">
+    <main className="mx-auto flex min-h-screen w-full max-w-4xl flex-1 flex-col gap-8 px-6 py-16 sm:px-10">
       <div className="rounded-[2rem] border border-black/8 bg-white p-8 shadow-[0_24px_80px_rgba(15,23,42,0.08)] sm:p-12">
         <div className="space-y-6">
           <div className="space-y-3">
@@ -37,6 +41,11 @@ export default function Home() {
             for local UI smoke testing.
           </div>
         </div>
+      </div>
+
+      <div className="space-y-4">
+        <h2 className="text-lg font-semibold text-slate-950">Your knowledge bases</h2>
+        <KnowledgeBaseList knowledgeBases={knowledgeBases} />
       </div>
     </main>
   );

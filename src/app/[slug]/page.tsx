@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { renameKnowledgeBaseAction } from "@/app/actions";
 import { ArticleView } from "@/components/article-view";
+import { EditableTitle } from "@/components/editable-title";
 import { TopicTree } from "@/components/topic-tree";
 import { getKnowledgeBaseBySlug, selectTopic } from "@/lib/knowledge-base/service";
 
@@ -41,9 +43,16 @@ export default async function KnowledgeBasePage({
           </Link>
 
           <div className="mb-6 border-b border-slate-200 pb-6">
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
-              {knowledgeBase.title}
-            </p>
+            <div>
+              <EditableTitle
+                value={knowledgeBase.title}
+                hiddenFields={{ slug: knowledgeBase.slug }}
+                action={renameKnowledgeBaseAction}
+                label="knowledge base title"
+                displayClassName="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500"
+                redirectBasePath="/"
+              />
+            </div>
             <p className="mt-3 text-sm leading-6 text-slate-600">
               {knowledgeBase.overview}
             </p>
