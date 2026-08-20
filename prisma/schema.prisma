@@ -1,0 +1,44 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model KnowledgeBase {
+  id                 String   @id @default(cuid())
+  slug               String   @unique
+  title              String
+  sourceUrl          String
+  sourceProvider     String
+  sourceConversation Json
+  overview           String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  topics             Topic[]
+}
+
+model Topic {
+  id                String        @id @default(cuid())
+  knowledgeBaseId   String
+  parentId          String?
+  slug              String
+  title             String
+  summary           String
+  article           String
+  order             Int
+  relatedTopicSlugs Json
+  decisions         Json
+  openQuestions     Json
+  uncertainties     Json
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  knowledgeBase     KnowledgeBase @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+  parent            Topic?        @relation("TopicChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  children          Topic[]       @relation("TopicChildren")
+
+  @@unique([knowledgeBaseId, slug])
+  @@index([knowledgeBaseId, parentId, order])
+}
