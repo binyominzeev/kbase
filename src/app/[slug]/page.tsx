@@ -25,6 +25,10 @@ export default async function KnowledgeBasePage({
 
   const currentTopic = selectTopic(knowledgeBase, topic);
 
+  if (!currentTopic) {
+    notFound();
+  }
+
   return (
     <main className="min-h-screen bg-white">
       <div className="mx-auto grid min-h-screen max-w-7xl gap-0 lg:grid-cols-[320px_minmax(0,1fr)]">

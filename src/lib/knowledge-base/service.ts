@@ -29,6 +29,8 @@ export type HydratedKnowledgeBase = {
   topicsBySlug: Map<string, TopicTreeNode>;
 };
 
+const knowledgeBaseSlugLimit = 5;
+
 function buildUniqueSlug(base: string, usedSlugs: Set<string>) {
   let slug = base || "topic";
   let suffix = 2;
@@ -85,49 +87,60 @@ async function createTopicBranch(
   }
 }
 
-async function buildKnowledgeBaseSlug(extracted: ExtractedKnowledgeBase) {
+function buildKnowledgeBaseSlug(extracted: ExtractedKnowledgeBase, attempt: number) {
   const baseSlug = slugify(extracted.slug ?? extracted.title) || "knowledge-base";
-  let slug = baseSlug;
-  let suffix = 2;
 
-  while (await prisma.knowledgeBase.findUnique({ where: { slug } })) {
-    slug = `${baseSlug}-${suffix}`;
-    suffix += 1;
-  }
-
-  return slug;
+  return attempt === 0 ? baseSlug : `${baseSlug}-${attempt + 1}`;
 }
 
 export async function buildKnowledgeBase(sourceUrl: string) {
   const conversation = await importPublicConversation(sourceUrl);
   const extracted = await extractKnowledgeBase(conversation);
-  const slug = await buildKnowledgeBaseSlug(extracted);
-  const usedSlugs = new Set<string>();
 
-  return prisma.$transaction(async (tx) => {
-    const knowledgeBase = await tx.knowledgeBase.create({
-      data: {
-        slug,
-        title: extracted.title,
-        sourceUrl: conversation.sourceUrl,
-        sourceProvider: conversation.provider,
-        sourceConversation: conversation as Prisma.InputJsonValue,
-        overview: extracted.overview,
-      },
-      select: {
-        id: true,
-        slug: true,
-      },
-    });
+  for (let attempt = 0; attempt < knowledgeBaseSlugLimit; attempt += 1) {
+    const slug = buildKnowledgeBaseSlug(extracted, attempt);
+    const usedSlugs = new Set<string>();
 
-    for (const [index, topic] of extracted.topics.entries()) {
-      await createTopicBranch(tx, knowledgeBase.id, topic, null, index, [], usedSlugs);
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const knowledgeBase = await tx.knowledgeBase.create({
+          data: {
+            slug,
+            title: extracted.title,
+            sourceUrl: conversation.sourceUrl,
+            sourceProvider: conversation.provider,
+            sourceConversation: conversation as Prisma.InputJsonValue,
+            overview: extracted.overview,
+          },
+          select: {
+            id: true,
+            slug: true,
+          },
+        });
+
+        for (const [index, topic] of extracted.topics.entries()) {
+          await createTopicBranch(tx, knowledgeBase.id, topic, null, index, [], usedSlugs);
+        }
+
+        return {
+          slug: knowledgeBase.slug,
+        };
+      });
+    } catch (error) {
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        error.code === "P2002"
+      ) {
+        continue;
+      }
+
+      throw error;
     }
+  }
 
-    return {
-      slug: knowledgeBase.slug,
-    };
-  });
+  throw new Error("KBase could not allocate a unique URL slug for this knowledge base.");
 }
 
 function buildTopicTree(
@@ -147,7 +160,8 @@ function buildTopicTree(
 ) {
   const nodesById = new Map<string, TopicTreeNode>();
   const nodesBySlug = new Map<string, TopicTreeNode>();
-  const topicIdsBySlug = new Map<string, string>();
+  const nodesByLowerTitle = new Map<string, TopicTreeNode>();
+  const nodesBySlugTail = new Map<string, TopicTreeNode>();
 
   for (const topic of topics) {
     const node: TopicTreeNode = {
@@ -164,7 +178,8 @@ function buildTopicTree(
 
     nodesById.set(topic.id, node);
     nodesBySlug.set(topic.slug, node);
-    topicIdsBySlug.set(topic.slug, topic.id);
+    nodesByLowerTitle.set(topic.title.toLowerCase(), node);
+    nodesBySlugTail.set(topic.slug.split("/").at(-1) ?? topic.slug, node);
   }
 
   const roots: TopicTreeNode[] = [];
@@ -179,14 +194,9 @@ function buildTopicTree(
     const relatedSlugs = ensureArrayOfStrings(topic.relatedTopicSlugs);
     node.relatedTopics = relatedSlugs
       .map((candidate) => {
-        const normalizedCandidate = slugify(candidate);
-        const match = Array.from(nodesBySlug.values()).find((entry) => {
-          const tail = entry.slug.split("/").at(-1);
-          return (
-            entry.title.toLowerCase() === candidate.toLowerCase() ||
-            tail === normalizedCandidate
-          );
-        });
+        const match =
+          nodesByLowerTitle.get(candidate.toLowerCase()) ??
+          nodesBySlugTail.get(slugify(candidate));
 
         return match ? { slug: match.slug, title: match.title } : null;
       })
@@ -251,7 +261,7 @@ export async function getKnowledgeBaseBySlug(
 export function selectTopic(
   knowledgeBase: HydratedKnowledgeBase,
   requestedSlug?: string
-) {
+): TopicTreeNode | undefined {
   if (requestedSlug) {
     const match = knowledgeBase.topicsBySlug.get(requestedSlug);
 
