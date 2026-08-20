@@ -37,6 +37,15 @@ export type HydratedKnowledgeBase = {
   topicsBySlug: Map<string, TopicTreeNode>;
 };
 
+export type BuildProgress = {
+  percent: number;
+  message: string;
+};
+
+export type BuildProgressCallback = (
+  progress: BuildProgress
+) => void | Promise<void>;
+
 const knowledgeBaseSlugLimit = 5;
 
 function parseStoredJson(value: string) {
@@ -109,16 +118,22 @@ function buildKnowledgeBaseSlug(extracted: ExtractedKnowledgeBase, attempt: numb
   return attempt === 0 ? baseSlug : `${baseSlug}-${attempt + 1}`;
 }
 
-export async function buildKnowledgeBase(sourceUrl: string) {
+export async function buildKnowledgeBase(
+  sourceUrl: string,
+  onProgress?: BuildProgressCallback
+) {
+  await onProgress?.({ percent: 10, message: "Importing the ChatGPT conversation..." });
   const conversation = await importPublicConversation(sourceUrl);
+  await onProgress?.({ percent: 35, message: "Conversation imported. Extracting key ideas..." });
   const extracted = await extractKnowledgeBase(conversation);
+  await onProgress?.({ percent: 75, message: "Knowledge structure ready. Saving topics..." });
 
   for (let attempt = 0; attempt < knowledgeBaseSlugLimit; attempt += 1) {
     const slug = buildKnowledgeBaseSlug(extracted, attempt);
     const usedSlugs = new Set<string>();
 
     try {
-      return await prisma.$transaction(async (tx) => {
+      const result = await prisma.$transaction(async (tx) => {
         const knowledgeBase = await tx.knowledgeBase.create({
           data: {
             slug,
@@ -142,6 +157,9 @@ export async function buildKnowledgeBase(sourceUrl: string) {
           slug: knowledgeBase.slug,
         };
       });
+
+      await onProgress?.({ percent: 100, message: "Knowledge base ready." });
+      return result;
     } catch (error) {
       if (
         typeof error === "object" &&
