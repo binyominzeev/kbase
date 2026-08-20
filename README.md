@@ -5,7 +5,7 @@ KBase turns a public AI conversation into a small, navigable encyclopedia.
 ## Stack
 
 - Next.js + TypeScript
-- PostgreSQL + Prisma
+- SQLite + Prisma
 - Tailwind CSS
 - OpenAI behind a small extractor abstraction (`LLM_PROVIDER`)
 
@@ -41,7 +41,7 @@ The MVP currently supports public ChatGPT share links.
    cp .env.example .env
    ```
 
-3. Set a PostgreSQL `DATABASE_URL`.
+3. The default SQLite `DATABASE_URL` is already set in `.env.example`.
 
 4. Generate the Prisma client and apply your schema:
 

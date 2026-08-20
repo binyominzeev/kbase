@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -13,7 +13,7 @@ model KnowledgeBase {
   title              String
   sourceUrl          String
   sourceProvider     String
-  sourceConversation Json
+  sourceConversation String
   overview           String
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
@@ -29,10 +29,10 @@ model Topic {
   summary           String
   article           String
   order             Int
-  relatedTopicSlugs Json
-  decisions         Json
-  openQuestions     Json
-  uncertainties     Json
+  relatedTopicSlugs String
+  decisions         String
+  openQuestions     String
+  uncertainties     String
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
   knowledgeBase     KnowledgeBase @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)

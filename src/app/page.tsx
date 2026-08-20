@@ -22,7 +22,7 @@ export default function Home() {
           <BuildForm />
 
           <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
-            KBase stores generated knowledge bases in PostgreSQL. Set
+            KBase stores generated knowledge bases in a local SQLite database. Set
             <code className="mx-1 rounded bg-white px-1.5 py-0.5 font-mono text-xs">
               DATABASE_URL
             </code>

@@ -31,6 +31,14 @@ export type HydratedKnowledgeBase = {
 
 const knowledgeBaseSlugLimit = 5;
 
+function parseStoredJson(value: string) {
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return [];
+  }
+}
+
 function buildUniqueSlug(base: string, usedSlugs: Set<string>) {
   let slug = base || "topic";
   let suffix = 2;
@@ -64,10 +72,10 @@ async function createTopicBranch(
       summary: topic.summary,
       article: topic.article,
       order,
-      relatedTopicSlugs: topic.relatedTopics,
-      decisions: topic.decisions,
-      openQuestions: topic.openQuestions,
-      uncertainties: topic.uncertainties,
+      relatedTopicSlugs: JSON.stringify(topic.relatedTopics),
+      decisions: JSON.stringify(topic.decisions),
+      openQuestions: JSON.stringify(topic.openQuestions),
+      uncertainties: JSON.stringify(topic.uncertainties),
     },
     select: {
       id: true,
@@ -109,7 +117,7 @@ export async function buildKnowledgeBase(sourceUrl: string) {
             title: extracted.title,
             sourceUrl: conversation.sourceUrl,
             sourceProvider: conversation.provider,
-            sourceConversation: conversation as Prisma.InputJsonValue,
+            sourceConversation: JSON.stringify(conversation),
             overview: extracted.overview,
           },
           select: {
@@ -152,10 +160,10 @@ function buildTopicTree(
     order: number;
     parentId: string | null;
     id: string;
-    relatedTopicSlugs: Prisma.JsonValue;
-    decisions: Prisma.JsonValue;
-    openQuestions: Prisma.JsonValue;
-    uncertainties: Prisma.JsonValue;
+    relatedTopicSlugs: string;
+    decisions: string;
+    openQuestions: string;
+    uncertainties: string;
   }>
 ) {
   const nodesById = new Map<string, TopicTreeNode>();
@@ -169,9 +177,9 @@ function buildTopicTree(
       title: topic.title,
       summary: topic.summary,
       article: topic.article,
-      decisions: ensureArrayOfStrings(topic.decisions),
-      openQuestions: ensureArrayOfStrings(topic.openQuestions),
-      uncertainties: ensureArrayOfStrings(topic.uncertainties),
+      decisions: ensureArrayOfStrings(parseStoredJson(topic.decisions)),
+      openQuestions: ensureArrayOfStrings(parseStoredJson(topic.openQuestions)),
+      uncertainties: ensureArrayOfStrings(parseStoredJson(topic.uncertainties)),
       relatedTopics: [],
       children: [],
     };
@@ -191,7 +199,9 @@ function buildTopicTree(
       continue;
     }
 
-    const relatedSlugs = ensureArrayOfStrings(topic.relatedTopicSlugs);
+    const relatedSlugs = ensureArrayOfStrings(
+      parseStoredJson(topic.relatedTopicSlugs)
+    );
     node.relatedTopics = relatedSlugs
       .map((candidate) => {
         const match =
